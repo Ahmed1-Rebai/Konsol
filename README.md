@@ -54,23 +54,59 @@ lib/
 
 ### Prerequisites
 
-- Flutter SDK `^3.11.4`
-- Dart SDK `^3.11.4`
-- Android Studio / Xcode
+- **Flutter SDK** `>=3.11.4` — [Install Flutter](https://docs.flutter.dev/get-started/install)
+- **Dart SDK** (bundled with Flutter)
+- **Android Studio** or **VS Code** with Flutter/Dart plugins
+- **Xcode** (macOS only, for iOS builds)
+- A physical device or emulator (iOS Simulator / Android Emulator)
 
-### Setup
+### Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/konsol.git
-cd konsol
+# 1. Clone the repository
+git clone https://github.com/Ahmed1-Rebai/Konsol.git
 
-# Install dependencies
+# 2. Navigate into the project
+cd Konsol
+
+# 3. Install dependencies
 flutter pub get
 
-# Run on connected device
+# 4. Run the app
 flutter run
 ```
+
+### Android Setup
+
+1. Enable **Developer Options** and **USB Debugging** on your device
+2. Connect via USB or set up wireless debugging
+3. Run `flutter run` or build an APK:
+
+```bash
+# Debug APK
+flutter build apk --debug
+
+# Release APK
+flutter build apk --release
+```
+
+The APK will be at `build/app/outputs/flutter-apk/app-release.apk`.
+
+### iOS Setup
+
+1. Open `ios/Runner.xcworkspace` in Xcode
+2. Set your **Development Team** under Signing & Capabilities
+3. Run on a connected iOS device or simulator:
+
+```bash
+# Run directly
+flutter run
+
+# Or build an IPA
+flutter build ipa --release
+```
+
+> **Note:** iOS builds require a paid Apple Developer account for device installation.
 
 ## Tech Stack
 

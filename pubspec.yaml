@@ -1,0 +1,59 @@
+name: konsol
+description: "A premium mobile SSH client"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.11.4
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # State management
+  flutter_riverpod: ^2.6.1
+
+  # Navigation
+  go_router: ^14.8.1
+
+  # Local DB (metadata only)
+  hive: ^2.2.3
+  hive_flutter: ^1.1.0
+
+  # Secure storage (passwords, private keys)
+  flutter_secure_storage: ^9.2.4
+
+  # Icons
+  lucide_icons: ^0.257.0
+
+  # Unique IDs
+  uuid: ^4.5.1
+
+  # Date formatting
+  intl: ^0.20.2
+
+  # Haptic feedback helper
+  vibration: ^2.0.0
+
+  cupertino_icons: ^1.0.8
+  dartssh2: ^4.0.1
+  xterm: ^4.0.0
+  cryptography: ^2.9.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/brand/
+  fonts:
+    - family: JetBrainsMono
+      fonts:
+        - asset: assets/fonts/JetBrainsMono-Regular.ttf
+        - asset: assets/fonts/JetBrainsMono-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/JetBrainsMono-Bold.ttf
+          weight: 700

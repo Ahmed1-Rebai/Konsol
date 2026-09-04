@@ -19,14 +19,48 @@ Konsol is a beautifully crafted SSH terminal built with Flutter. Manage your ser
 
 ---
 
+## What connecting looks like
+
+Every session opens on Konsol's own banner instead of the server's raw MOTD — a character-built echo of the app mark, rendered client-side in true-colour ANSI, with the host you just connected to underneath:
+
+```
+  ██╗  ██╗
+  ██║ ██╔╝    >_
+  █████╔╝
+  ██╔═██╗
+  ██║  ██╗
+  ╚═╝  ╚═╝
+
+  KONSOL
+  Connect. SSH. Control.
+
+  host       prod-api
+  target     ubuntu@203.0.113.42:22
+  auth       ssh key
+  connected  21:42
+
+  ██ ██ ██ ██ ██ ██ ██ ██
+```
+
+*(shown here as plain text — on-device it renders in the terminal's neon cyan → mint gradient, toggle it off any time in* **Settings → Terminal → Welcome banner***)*
+
+From there, whatever you type is helped along by two things the app builds live, no model involved:
+
+- **Remote path autocomplete** — start typing `cd /var/w` and Konsol globs the *actual* remote filesystem over a side SSH channel, offering only paths that really exist.
+- **A contextual action bar** — open `nano`, `vim`, `htop`, `less`, or `man` and a row of real shortcuts appears above the keyboard: `Save`, `Save & exit`, `Exit w/o saving` for editors, `Quit` for pagers and monitors — detected from the alternate-screen-buffer switch every full-screen terminal app makes, not guessed.
+
+---
+
 ## Features
 
 - **Host Management** — Add, edit, search, pin, and color-code your servers
 - **SSH Terminal** — Full VT100 terminal powered by `xterm` with smooth rendering
-- **Multi-Session Tabs** — Run multiple SSH sessions simultaneously
-- **Secure Credentials** — Passwords and private keys stored in the device keychain via `flutter_secure_storage`
+- **Multi-Session Tabs** — Run multiple SSH sessions simultaneously, each with its own live status dot
+- **Custom Welcome Banner** — Konsol's own ASCII mark and connection summary in place of the server's MOTD
+- **Contextual Save/Exit Bar** — real `nano`/`vim`/`htop`/pager shortcuts, shown the instant a full-screen program takes over
+- **Secure Credentials** — Passwords and private keys stored in the device keychain via `flutter_secure_storage`, with a show/hide toggle while typing
 - **SSH Key Manager** — Generate and manage Ed25519 / RSA keys
-- **Smart Path Completion** — Real-time remote path autocompletion
+- **Smart Path Completion** — Real-time remote path autocompletion, globbed on the actual server — no model, no guessing
 - **Quick Key Bar** — ESC, Tab, Ctrl+C, arrows, and common shell symbols at your fingertips
 - **Terminal Themes** — Choose from Konsol, Tokyo Night, or classic Green on Black
 - **Dark & Light Mode** — Full theme support with system auto-switch
@@ -43,7 +77,7 @@ lib/
 │   ├── hosts/          # Host list, add/edit screens
 │   ├── keys/           # SSH key management
 │   ├── settings/       # App settings screen
-│   └── terminal/       # Terminal controller, session view, path completer
+│   └── terminal/       # Session controller, path completer, welcome banner
 ├── router/             # GoRouter navigation config
 └── main.dart           # App entry point
 ```

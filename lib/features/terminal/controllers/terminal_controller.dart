@@ -8,6 +8,7 @@ import 'package:konsol/data/models/host.dart';
 import 'package:konsol/data/repositories/ssh_service.dart';
 import 'package:konsol/features/terminal/models/session_tab_key.dart';
 import 'package:konsol/features/terminal/services/path_completer.dart';
+import 'package:konsol/features/terminal/services/welcome_banner.dart';
 import 'package:xterm/xterm.dart';
 
 enum TerminalStatus {
@@ -47,6 +48,84 @@ class TerminalSessionController extends StateNotifier<TerminalStatus> {
   /// keystrokes we send rather than from the echoed output.
   final StringBuffer _line = StringBuffer();
 
+  /// The full-screen program the remote shell appears to be running, so the
+  /// UI can offer its save/quit shortcuts instead of leaving the user to
+  /// hunt for the right control sequence. Null when the shell is just a
+  /// normal prompt.
+  final ValueNotifier<String?> activeProgram = ValueNotifier(null);
+
+  /// The command word of the line last submitted, kept until the terminal
+  /// either confirms it opened a full-screen program (by switching to the
+  /// alternate buffer) or the shell prompt returns without ever doing so.
+  String? _pendingProgram;
+
+  /// Command names whose full-screen UI we know the exit sequence for.
+  /// Anything not in here still gets caught by [TerminalStatus] — this only
+  /// gates the contextual save/quit bar.
+  static const Set<String> _knownPrograms = {
+    'nano', 'pico',
+    'vim', 'vi', 'nvim', 'view',
+    'less', 'more', 'most', 'man',
+    'htop', 'top', 'btop', 'atop', 'gtop',
+  };
+
+  /// Whether the server's own post-connect banner (MOTD, last-login line,
+  /// etc.) has already been replaced with [WelcomeBanner] — true when the
+  /// setting is off or hasn't been armed yet, so [_onRemoteOutput] has
+  /// nothing to do.
+  bool _bannerCleared = true;
+  Timer? _bannerClearTimer;
+
+  /// Waits for the login banner to actually finish printing — rather than
+  /// clearing on a fixed delay — by resetting a short idle timer on every
+  /// chunk of output, capped so a chatty server can't stall it forever.
+  void _armBannerClear() {
+    _bannerCleared = false;
+    _bannerClearTimer?.cancel();
+    _bannerClearTimer = Timer(const Duration(milliseconds: 2500), _flushBannerClear);
+  }
+
+  void _onRemoteOutput() {
+    if (_bannerCleared) return;
+    _bannerClearTimer?.cancel();
+    _bannerClearTimer = Timer(const Duration(milliseconds: 450), _flushBannerClear);
+  }
+
+  void _flushBannerClear() {
+    if (_bannerCleared || _disposed) return;
+    _bannerCleared = true;
+    // Escape codes only — nothing is sent to the remote, so the shell's own
+    // scrollback and history are untouched; only Konsol's local view wipes.
+    terminal.write('\x1b[H\x1b[2J\x1b[3J');
+    final h = host;
+    if (h != null) terminal.write(WelcomeBanner.build(h));
+  }
+
+  static String? _recognizeProgram(String line) {
+    final trimmed = line.trim();
+    if (trimmed.isEmpty) return null;
+
+    final words = trimmed.split(RegExp(r'\s+'));
+    var i = 0;
+    // Skip leading env assignments (FOO=bar nano file).
+    while (i < words.length && RegExp(r'^[\w]+=').hasMatch(words[i])) {
+      i++;
+    }
+    if (i < words.length && (words[i] == 'sudo' || words[i] == 'sudoedit')) {
+      i++;
+      while (i < words.length && words[i].startsWith('-')) {
+        i++;
+      }
+    }
+    if (i >= words.length) return null;
+
+    var cmd = words[i];
+    final slash = cmd.lastIndexOf('/');
+    if (slash >= 0) cmd = cmd.substring(slash + 1);
+    cmd = cmd.toLowerCase();
+    return _knownPrograms.contains(cmd) ? cmd : null;
+  }
+
   Host? get host {
     final hosts = ref.read(hostsProvider);
     for (final h in hosts) {
@@ -67,6 +146,19 @@ class TerminalSessionController extends StateNotifier<TerminalStatus> {
     terminal.onResize = (w, h, pw, ph) {
       _handle?.resize(w, h);
     };
+    // The parser has finished handling a chunk by the time this fires, so
+    // isUsingAltBuffer already reflects any smcup/rmcup escape it contained.
+    terminal.addListener(_onTerminalChanged);
+  }
+
+  void _onTerminalChanged() {
+    if (terminal.isUsingAltBuffer) {
+      if (activeProgram.value == null && _pendingProgram != null) {
+        activeProgram.value = _pendingProgram;
+      }
+    } else if (activeProgram.value != null) {
+      activeProgram.value = null;
+    }
   }
 
   Future<void> connect() async {
@@ -120,7 +212,10 @@ class TerminalSessionController extends StateNotifier<TerminalStatus> {
           .cast<List<int>>()
           .transform(const Utf8Decoder(allowMalformed: true))
           .listen(
-            terminal.write,
+            (data) {
+              terminal.write(data);
+              _onRemoteOutput();
+            },
             onError: (Object e, StackTrace s) => _onError(e),
             onDone: () {
               if (!_disposed && state != TerminalStatus.error) {
@@ -138,6 +233,10 @@ class TerminalSessionController extends StateNotifier<TerminalStatus> {
 
       state = TerminalStatus.connected;
       ref.read(hostsProvider.notifier).updateLastConnected(host.id);
+
+      final showWelcomeBanner =
+          ref.read(settingsProvider)['welcomeBanner'] as bool? ?? true;
+      if (showWelcomeBanner) _armBannerClear();
     } on SshConnectionException catch (e) {
       _onError(e);
     } catch (e) {
@@ -156,7 +255,9 @@ class TerminalSessionController extends StateNotifier<TerminalStatus> {
       final code = char.codeUnitAt(0);
 
       if (char == '\r' || char == '\n') {
-        _completer?.noteCommand(_line.toString());
+        final line = _line.toString();
+        _completer?.noteCommand(line);
+        _pendingProgram = _recognizeProgram(line);
         _resetLine();
         changed = true;
       } else if (code == 0x7f || code == 0x08) {
@@ -246,6 +347,10 @@ class TerminalSessionController extends StateNotifier<TerminalStatus> {
     _completer = null;
     _line.clear();
     completions.value = const [];
+    _pendingProgram = null;
+    activeProgram.value = null;
+    _bannerClearTimer?.cancel();
+    _bannerCleared = true;
 
     final stdoutSub = _stdoutSub;
     final stderrSub = _stderrSub;
@@ -268,8 +373,10 @@ class TerminalSessionController extends StateNotifier<TerminalStatus> {
   @override
   void dispose() {
     _disposed = true;
+    terminal.removeListener(_onTerminalChanged);
     unawaited(_teardown());
     completions.dispose();
+    activeProgram.dispose();
     super.dispose();
   }
 }

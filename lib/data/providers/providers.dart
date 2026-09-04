@@ -98,6 +98,7 @@ class SettingsNotifier extends StateNotifier<Map<String, dynamic>> {
       'defaultFontSize': box.get('defaultFontSize', defaultValue: 14.0),
       'terminalColorScheme':
           box.get('terminalColorScheme', defaultValue: 'default'),
+      'welcomeBanner': box.get('welcomeBanner', defaultValue: true),
     };
   }
 

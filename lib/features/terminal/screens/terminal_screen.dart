@@ -112,6 +112,7 @@ class _TerminalSessionViewState extends ConsumerState<TerminalSessionView>
             ),
           ),
           if (status == TerminalStatus.connected) ...[
+            _ProgramActionBar(controller: ctrl),
             _CompletionBar(controller: ctrl),
             if (keyboardOpen) _QuickKeyBar(terminal: ctrl.terminal),
           ],
@@ -124,6 +125,192 @@ class _TerminalSessionViewState extends ConsumerState<TerminalSessionView>
     final h = ctrl.host;
     if (h == null) return 'Heartbeat lost.';
     return '${h.username}@${h.address}:${h.port}';
+  }
+}
+
+/// One tappable action for the program [_ProgramActionBar] is showing —
+/// e.g. nano's "Save & Exit" — expressed as raw key/text input so it works
+/// the same regardless of what's actually bound to those keys remotely.
+class _ProgramAction {
+  final String label;
+  final IconData icon;
+  final bool primary;
+  final bool warn;
+  final void Function(Terminal terminal) run;
+
+  const _ProgramAction(
+    this.label,
+    this.icon,
+    this.run, {
+    this.primary = false,
+    this.warn = false,
+  });
+}
+
+final List<_ProgramAction> _nanoActions = [
+  _ProgramAction('Save', Icons.save_outlined, (t) {
+    t.charInput(0x6f, ctrl: true); // ^O — Write Out
+    t.keyInput(TerminalKey.enter); // confirm the current filename
+  }),
+  _ProgramAction('Save & exit', Icons.check_circle_rounded, (t) {
+    t.charInput(0x6f, ctrl: true);
+    t.keyInput(TerminalKey.enter);
+    t.charInput(0x78, ctrl: true); // ^X — Exit
+  }, primary: true),
+  _ProgramAction('Exit w/o saving', Icons.delete_outline_rounded, (t) {
+    t.charInput(0x78, ctrl: true); // ^X — Exit; if modified, nano asks Y/N
+    t.textInput('n'); // discard — a no-op keystroke if it wasn't asked
+  }, warn: true),
+];
+
+final List<_ProgramAction> _vimActions = [
+  _ProgramAction('Save', Icons.save_outlined, (t) {
+    t.keyInput(TerminalKey.escape);
+    t.textInput(':w');
+    t.keyInput(TerminalKey.enter);
+  }),
+  _ProgramAction('Save & exit', Icons.check_circle_rounded, (t) {
+    t.keyInput(TerminalKey.escape);
+    t.textInput(':wq');
+    t.keyInput(TerminalKey.enter);
+  }, primary: true),
+  _ProgramAction('Quit w/o saving', Icons.delete_outline_rounded, (t) {
+    t.keyInput(TerminalKey.escape);
+    t.textInput(':q!');
+    t.keyInput(TerminalKey.enter);
+  }, warn: true),
+];
+
+final List<_ProgramAction> _quitOnlyActions = [
+  _ProgramAction('Quit', Icons.close_rounded, (t) {
+    t.textInput('q');
+  }, primary: true),
+];
+
+List<_ProgramAction> _actionsFor(String program) {
+  switch (program) {
+    case 'nano':
+    case 'pico':
+      return _nanoActions;
+    case 'vim':
+    case 'vi':
+    case 'nvim':
+    case 'view':
+      return _vimActions;
+    default:
+      // less, more, most, man, htop, top, btop, atop, gtop — all quit on 'q'.
+      return _quitOnlyActions;
+  }
+}
+
+/// Save/quit shortcuts for whatever full-screen program the shell appears to
+/// be running — recognized from the command line that opened it, shown for
+/// as long as the terminal stays on the alternate screen buffer. Visible
+/// even with the keyboard closed, since "save and get out of nano" is
+/// exactly the moment a user's thumb is done typing.
+class _ProgramActionBar extends StatelessWidget {
+  final TerminalSessionController controller;
+
+  const _ProgramActionBar({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<String?>(
+      valueListenable: controller.activeProgram,
+      builder: (context, program, _) {
+        if (program == null) return const SizedBox.shrink();
+        final actions = _actionsFor(program);
+
+        return Container(
+          padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),
+          decoration: const BoxDecoration(
+            color: AppColors.surface,
+            border: Border(top: BorderSide(color: AppColors.border)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.terminal_rounded,
+                  size: 14, color: AppColors.textTertiary),
+              const SizedBox(width: 6),
+              Text(
+                program,
+                style: const TextStyle(
+                  fontFamily: 'JetBrainsMono',
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: AppColors.textTertiary,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    for (final action in actions) ...[
+                      _ProgramActionButton(
+                        action: action,
+                        onTap: () {
+                          Haptics.light();
+                          action.run(controller.terminal);
+                        },
+                      ),
+                      const SizedBox(width: 8),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _ProgramActionButton extends StatelessWidget {
+  final _ProgramAction action;
+  final VoidCallback onTap;
+
+  const _ProgramActionButton({required this.action, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final fg = action.primary
+        ? const Color(0xFF04212B)
+        : action.warn
+            ? AppColors.error
+            : AppColors.textPrimary;
+
+    return Material(
+      color: action.primary
+          ? AppColors.accent
+          : action.warn
+              ? AppColors.error.withValues(alpha: 0.12)
+              : AppColors.surfaceLight,
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(action.icon, size: 15, color: fg),
+              const SizedBox(width: 6),
+              Text(
+                action.label,
+                style: TextStyle(
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                  color: fg,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }
 

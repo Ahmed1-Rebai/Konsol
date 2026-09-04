@@ -22,6 +22,7 @@ class _AddEditHostScreenState extends ConsumerState<AddEditHostScreen> {
   late final TextEditingController _portController;
   late final TextEditingController _usernameController;
   late final TextEditingController _passwordController;
+  bool _obscurePassword = true;
 
   String _authMethod = 'password';
   String? _selectedKeyId;
@@ -181,7 +182,18 @@ class _AddEditHostScreenState extends ConsumerState<AddEditHostScreen> {
                 label: 'Password',
                 hint: _isEditing ? 'Leave blank to keep existing' : 'Enter your password',
                 icon: Icons.lock_outline,
-                obscureText: true,
+                obscureText: _obscurePassword,
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_outlined
+                        : Icons.visibility_off_outlined,
+                    size: 20,
+                  ),
+                  color: AppColors.textTertiary,
+                  onPressed: () =>
+                      setState(() => _obscurePassword = !_obscurePassword),
+                ),
               ),
               Text(
                 'Stored securely in the device keychain.',
@@ -226,6 +238,7 @@ class _AddEditHostScreenState extends ConsumerState<AddEditHostScreen> {
     String? hint,
     IconData? icon,
     bool obscureText = false,
+    Widget? suffixIcon,
     TextInputType? keyboardType,
     List<TextInputFormatter>? inputFormatters,
     String? Function(String?)? validator,
@@ -245,6 +258,7 @@ class _AddEditHostScreenState extends ConsumerState<AddEditHostScreen> {
         prefixIcon: icon != null
             ? Icon(icon, size: 20, color: theme.colorScheme.onSurface.withValues(alpha: 0.4))
             : null,
+        suffixIcon: suffixIcon,
       ),
     );
   }
